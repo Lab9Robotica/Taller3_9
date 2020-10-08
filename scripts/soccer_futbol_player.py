@@ -2,7 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float32MultiArray
 import matplotlib.pyplot as plt
 from matplotlib import animation
 import threading
@@ -20,12 +20,10 @@ def callbackPos (msg):
 
 def callbackBallPos (msg):
 	global posBall
-	posBall = [ msg.linear.x, msg.linear.y ]
-
+	posBall = msg.data
 
 
 def graficar(a):
-
 	plt.cla()	# Se borra informacion anterior al ploteo actual
 	plt.plot( posSIMx, posSIMy )	# Plotea las variables
 	plt.axis([ -6.6, 6.6, -5, 5 ])	#Define limites en X y Y (limites del cancha)
@@ -37,13 +35,12 @@ def grafica():
 
 
 def soccer_player():
-
 	# Inicializa el nodo.
 	rospy.init_node('soccer_futbol_player', anonymous=True)
 
 	#Inicializa los Subscribers
 	rospy.Subscriber('robot_Position', Twist, callbackPos)
-	rospy.Subscriber('ball_Postion', Twist, callbackBallPos)
+	rospy.Subscriber('ball_Position', Float32MultiArray, callbackBallPos)
 
 	# Inicializa los Publishers
 	pubKick = rospy.Publisher('kick_power', Float32, queue_size=10)
