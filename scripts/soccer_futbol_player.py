@@ -8,9 +8,10 @@ from matplotlib import animation
 import threading
 import numpy as np
 import math
+import time
 
 # Variables globales
-global posBall, rho, alpha, beta
+global posBall, rho, alpha, beta, ang, theta
 
 # Constantes del controlador de velocidad
 kp = 0.3
@@ -28,6 +29,8 @@ posBall = [ 0, 0 ]
 rho = 0
 alpha = 0
 beta = 0
+ang = 0
+
 
 def callbackPos (msg):
 	global posBall, rho, alpha, beta
@@ -43,6 +46,8 @@ def callbackPos (msg):
 	rho = np.sqrt( dX**2 + dY**2 )
 	alpha = -msg.angular.z + math.atan2( dY, dX )
 	beta = -msg.angular.z - alpha
+
+	print(msg.angular.z)
 
 
 def callbackBallPos (msg):
@@ -63,7 +68,7 @@ def grafica():
 
 
 def soccer_player():
-	global rho, alpha,beta
+	global rho, alpha,beta, ang
 
 	# Inicializa el nodo.
 	rospy.init_node('soccer_futbol_player', anonymous=True)
@@ -86,44 +91,98 @@ def soccer_player():
 	msgVel = Twist()
 	msgKick = Float32()
 
+
+	count = 0
+	tiempo = 0
+	ini = time.time()
 	while not rospy.is_shutdown():
 
-		# Actualiza los datos dependiendo del valor de alpha
 		v = kp*rho
-		w = kalpha*alpha + kbeta*beta
 
-		if alpha >= -np.pi/2 and alpha <= np.pi/2:
-			
-			nrho = -np.cos(alpha)*v
-			nalpha = np.sin(alpha)/rho*v - w
-			nbeta = -np.sin(alpha)/rho*v
-		else:
-			
-			nrho = -np.cos(alpha)*v
-			nalpha = -np.sin(alpha)/rho*v + w
-			nbeta = np.sin(alpha)/rho*v
-
-		# Actualiza los valores
-		rho += nrho
-		alpha += nalpha
-		nbeta += beta
-
-		# Define las velocidades lineal y angular
-		v = kp*rho
-		w = kalpha*alpha + kbeta*beta
+		count += 1
+		d = 
 		
-		# Asigna datos a los mensajes
-		msgVel.linear.x =	v	# TODO: Asignar valores
-		msgVel.linear.y = 0	# TODO: Asignar valores
-		msgVel.angular.z = w	# TODO: Asignar valores
+		if count <= d:
 
-		msgKick.data = 0	# TODO: Asignar valores
+			difX = posSIMx[-1] - posBall[0]
+			difY = posSIMy[-1] - posBall[1]
+			ang = math.atan2(difY, difX)
+			nbeta = np.sin(alpha)/rho*v
+			ang += nbeta
+			w = kbeta*ang
+			msgVel.linear.x = 0
+			msgVel.linear.y = 0
+			msgVel.angular.z = w
+			print('Velocidad angular')
+			print(ang)
 
-		# Publica los mensajes en el topic respectivo.
-		pubVel.publish(msgVel)
-		pubKick.publish(msgKick)
+		fin = time.time()
 
-		rate.sleep()
+		tiempo = fin - ini
+
+
+
+		else:
+
+
+			# Actualiza los datos dependiendo del valor de alpha
+			
+			w = kalpha*alpha + kbeta*beta
+
+			if alpha >= -np.pi/2 and alpha <= np.pi/2:
+			
+				nrho = -np.cos(alpha)*v
+				nalpha = np.sin(alpha)/rho*v - w
+				#nbeta = -np.sin(alpha)/rho*v
+			else:
+				
+				nrho = -np.cos(alpha)*v
+				
+				nalpha = -np.sin(alpha)/rho*v + w
+				#nbeta = np.sin(alpha)/rho*v
+
+			# Actualiza los valores
+			rho += nrho
+			alpha += nalpha
+			#nbeta += beta
+
+			# Define las velocidades lineal y angular
+			v = kp*rho
+			
+			w = 0 #kalpha*alpha # + kbeta*beta
+
+
+
+
+
+			# Asigna datos a los mensajes
+			msgVel.linear.x =	v*np.cos(beta-alpha)	# TODO: Asignar valores
+			msgVel.linear.y = v*np.sin(beta-alpha)	# TODO: Asignar valores
+			msgVel.angular.z = w	# TODO: Asignar valores
+
+			# Ajusta Beta despues de que el robot llegue a la pos final
+			da = 0.1
+			if abs(rho) <=da:
+				difX = posBall[0] - 6
+				difY = posBall[1]
+				ang = math.atan2(difY, difX)
+
+				nbeta = np.sin(alpha)/rho*v
+				ang += nbeta
+				w = kbeta*ang
+				msgVel.linear.x = 0
+				msgVel.linear.y = 0
+				msgVel.angular.z = w
+				print('Velocidad angular')
+				print(ang)
+
+			msgKick.data = 0	# TODO: Asignar valores
+
+			# Publica los mensajes en el topic respectivo.
+			pubVel.publish(msgVel)
+			pubKick.publish(msgKick)
+
+			rate.sleep()
 
 
 if __name__ == '__main__':
