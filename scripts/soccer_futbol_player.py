@@ -10,11 +10,10 @@ import numpy as np
 import math
 
 # Variables globales
-global rho, alpha, beta, posFin, thetaAct, velDir, alineado, llego, listo
+global rho, beta, posFin, thetaAct, velDir, nextStep, ball
 
 # Coordenadas para la transformacion
 rho = 0.1
-alpha = 0.2
 beta = 0
 
 # Posicion a la que se quiere llegar
@@ -26,20 +25,19 @@ thetaAct = 0.15
 # Direccion de la velocidad para obtener sus componentes
 velDir = 0
 
-# Indican si el robot ya se alineó mirando hacia la cancha, si llego a la pelota y si
-# el reccorrido termino
-alineado = False
-llego = False
-listo = False
-
 # Constantes del controlador de velocidad
-kp = 0.33
-kalpha = 0.1
+kp = 0.4
 kbeta = 0.5
 
 # Posicion del robot para la grafica
 posSIMx = []
 posSIMy = []
+
+# Posicion de la pelota
+ball = []
+
+# Booleano para el paso puntos
+nextStep = False
 
 
 def callbackPos (msg):
@@ -51,6 +49,9 @@ def callbackPos (msg):
 
 
 def posicionFinal(posBall):
+	global nextStep
+
+	# Eleccion de la cancha mas cercana
 	x = 0
 	if len(posSIMx)>0:
 		if posBall[0]>0:
@@ -63,6 +64,43 @@ def posicionFinal(posBall):
 			else:
 				x = 6
 
+	dXc = x - posBall[0]
+	dXr = x - posSIMx[-1]
+
+	# Este ciclo determina si el robot esta mas cerca a la cancha que la pelota
+	if abs(dXc)>abs(dXr):
+		nextStep = False
+		if posBall[1]>0:
+			y = posBall[1] - 0.5
+		else:
+			y = posBall[1] + 0.5
+
+		if posBall[0] > 0:
+			x = posBall[0] - 0.1
+		else:
+			x = posBall[0] + 0.1
+
+		dX = x - posSIMx[-1]
+		dY = y - posSIMx[-1]
+		theta = math.atan2( dY, dX )
+
+		return [ x, y ], theta
+
+	# Determina el punto en el cual el robot debe ir antes de acercarse a la pelota
+	if not nextStep:
+		dX = x - posBall[0]
+
+		theta = math.atan2( -posBall[1], dX )
+
+		x = posBall[0] - 0.2*np.cos(theta)
+		y = posBall[1] - 0.2*np.sin(theta)
+
+		if abs(rho)>0.03:
+			return [ x, y ], theta
+		else:
+			nextStep = True
+
+	# Determina el punto final
 	dX = x - posBall[0]
 
 	theta = math.atan2( -posBall[1], dX )
@@ -70,13 +108,14 @@ def posicionFinal(posBall):
 	x = posBall[0] - 0.09*np.cos(theta)
 	y = posBall[1] - 0.09*np.sin(theta)
 
-	return [ x, y ], theta
+	return [x,y], theta
 
 
 def callbackBallPos (msg):
-	global rho, alpha, beta, posFin, velDir
+	global rho, beta, posFin, velDir, ball
 
 	posFin, beta = posicionFinal(msg.data)
+	ball = msg.data
 
 	# Diferencial de la posicion
 	dX = posFin[0] - posSIMx[-1]
@@ -84,22 +123,33 @@ def callbackBallPos (msg):
 
 	# Transformacion de coordenadas
 	rho = np.sqrt( dX**2 + dY**2 )
-	velDir = math.atan2( dY, dX )
+
+	# En los dos ultimos puntos el robot ya esta alineado mirando hacia la cancha
+	if nextStep:
+		velDir = beta
+	else:
+		velDir = math.atan2( dY, dX )
 
 
 def graficar(a):
 	plt.cla()	# Se borra informacion anterior al ploteo actual
+	plt.title('Trayectoria del robot')
+	plt.xlabel('X')
+	plt.ylabel('Y')
 	plt.plot( posSIMx, posSIMy )	# Plotea las variables
+	plt.scatter(posFin[0],posFin[1])
+	plt.scatter(ball[0], ball[1], marker="x", c="r")
 	plt.axis([ -6.6, 6.6, -5, 5 ])	#Define limites en X y Y (limites de la cancha)
+	
 
 
 def grafica():
 	objeto = animation.FuncAnimation(plt.figure(1), graficar, 10000)
-	plt.show()
+	plt.show()	
 
 
 def soccer_player():
-	global rho, alpha,beta, alineado, llego, listo
+	global rho, beta, nextStep, llego, listo
 
 	# Inicializa el nodo.
 	rospy.init_node('soccer_futbol_player', anonymous=True)
@@ -122,31 +172,28 @@ def soccer_player():
 
 	while not rospy.is_shutdown():
 
-		# Alinea al robot mirando hacia la cancha
-		while abs(beta - thetaAct) > 0.01 and not listo:
-			w = kbeta*(beta - thetaAct)
+		# Alinea al robot mirando hacia posicion dada por la funcion posicionFinal
+		if abs(velDir - thetaAct) > 0.08:
+			w = kbeta*(velDir - thetaAct)
+
+			msgVel.linear.x = 0
+			msgVel.linear.y = 0
 			msgVel.angular.z = w
 			pubVel.publish(msgVel)
-
-			if abs(beta - thetaAct) < 0.01:
-				listo = True
-				msgVel.angular.z = 0
-				pubVel.publish(msgVel)
-
-		# Acerca al robot hasta la pelota
-		while abs(rho) > 0.03 and not llego:
+		# Lleva al robot hasta la posicion dada por la funcion posicionFinal
+		else:
 			v = kp*rho
 			msgVel.linear.x =	v*np.sin( velDir - thetaAct )
 			msgVel.linear.y = v*np.cos( velDir - thetaAct )
-			pubVel.publish(msgVel)
-			if abs(rho)<0.03:
-				llego = True
+			msgVel.angular.z = 0
+			if abs(rho)>0.03:
+				pubVel.publish(msgVel)
+			else:
 				msgVel.linear.x = 0
 				msgVel.linear.y = 0
 				pubVel.publish(msgVel)
-		rate.sleep()
 
-		print('Hecho')
+		rate.sleep()
 
 
 if __name__ == '__main__':
