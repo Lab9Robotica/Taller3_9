@@ -9,6 +9,10 @@ from threading import Thread
 import numpy as np
 import math
 
+import sys
+
+from taller3_9.srv import soccer_player_service, soccer_player_serviceResponse
+
 # Variables globales
 global rho, beta, posFin, thetaAct, velDir, nextStep, ball
 
@@ -64,27 +68,29 @@ def posicionFinal(posBall):
 			else:
 				x = 6
 
-	dXc = x - posBall[0]
-	dXr = x - posSIMx[-1]
 
-	# Este ciclo determina si el robot esta mas cerca a la cancha que la pelota
-	if abs(dXc)>abs(dXr):
-		nextStep = False
-		if posBall[1]>0:
-			y = posBall[1] - 0.5
-		else:
-			y = posBall[1] + 0.5
+	if len(posSIMx)>0:
+		dXc = x - posBall[0]
+		dXr = x - posSIMx[-1]
 
-		if posBall[0] > 0:
-			x = posBall[0] - 0.1
-		else:
-			x = posBall[0] + 0.1
+		# Este ciclo determina si el robot esta mas cerca a la cancha que la pelota
+		if abs(dXc)>abs(dXr):
+			nextStep = False
+			if posBall[1]>0:
+				y = posBall[1] - 0.5
+			else:
+				y = posBall[1] + 0.5
 
-		dX = x - posSIMx[-1]
-		dY = y - posSIMx[-1]
-		theta = math.atan2( dY, dX )
+			if posBall[0] > 0:
+				x = posBall[0] - 0.1
+			else:
+				x = posBall[0] + 0.1
 
-		return [ x, y ], theta
+			dX = x - posSIMx[-1]
+			dY = y - posSIMx[-1]
+			theta = math.atan2( dY, dX )
+
+			return [ x, y ], theta
 
 	# Determina el punto en el cual el robot debe ir antes de acercarse a la pelota
 	if not nextStep:
@@ -148,11 +154,12 @@ def grafica():
 	plt.show()	
 
 
-def soccer_player():
+def soccer_player( gol ):
 	global rho, beta, nextStep, llego, listo
 
 	# Inicializa el nodo.
-	rospy.init_node('soccer_futbol_player', anonymous=True)
+	
+
 
 	#Inicializa los Subscribers
 	rospy.Subscriber('robot_Position', Twist, callbackPos)
@@ -164,13 +171,18 @@ def soccer_player():
 
 	# Inicializa el publicador de la velocidad
 	pubVel = rospy.Publisher('robot_move_vel', Twist, queue_size=10)
+	pubKick =rospy.Publisher('kick_power', Float32, queue_size=10)
 
 	rate = rospy.Rate(10)	#10Hz
 
 	#Inicializa el mensaje
 	msgVel = Twist()
+	msgKick = Float32()
+
+	
 
 	while not rospy.is_shutdown():
+		rate.sleep()
 
 		# Alinea al robot mirando hacia posicion dada por la funcion posicionFinal
 		if abs(velDir - thetaAct) > 0.08:
@@ -193,11 +205,52 @@ def soccer_player():
 				msgVel.linear.y = 0
 				pubVel.publish(msgVel)
 
-		rate.sleep()
+		if gol.gol == 'Gol':
+			if len(ball)>0:
+				dX = ball[0] - posSIMx[-1]
+				dY = ball[1] - posSIMy[-1]
 
+				distancia = math.sqrt( dX**2 + dY**2 )
+
+			x = 0
+			if len(posSIMx)>0:
+				if len(ball)>0:
+					if ball[0]>0:
+						x = 6
+					elif ball[0]<0:
+						x = -6
+					else:
+						if posSIMx[-1] > 0:
+							x = -6
+						else:
+							x = 6
+
+
+			dX = x - ball[0]
+			dY = -ball[1]
+
+			cancha_dist = math.sqrt( dX**2 + dY**2 )
+
+			if distancia <= 0.12:
+				if cancha_dist > 3:
+					log = 1.7*math.log(cancha_dist,2)
+				else:
+					log = 1.5*cancha_dist
+
+				msgKick.data = log
+				pubKick.publish(msgKick)
+		rate.sleep()
+	return soccer_player_serviceResponse('Gool')
+
+	
+
+	
+
+def serviceCallback():
+	rospy.init_node('soccer_futbol_player', anonymous=True)
+	s=rospy.Service('soccer_player_service', soccer_player_service, soccer_player)
+	rospy.spin()
 
 if __name__ == '__main__':
-	try:
-		soccer_player()
-	except rospy.ROSInterruptException:
-		pass
+	
+	serviceCallback()
