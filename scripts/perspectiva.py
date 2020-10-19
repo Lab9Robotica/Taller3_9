@@ -135,7 +135,7 @@ while True:
     puntos1=np.float32(circles)*5/4
     puntos2=np.float32([[0,0],[900,0],[0,600],[900,600]])
     matrix=cv2.getPerspectiveTransform(puntos1,puntos2)
-    result=cv2.warpPerspective(im_src,matrix,(900,600))
+    result=cv2.warpPerspective(frame,matrix,(900,600))
     cv2.imshow('Imagen2',result)  
     
     
