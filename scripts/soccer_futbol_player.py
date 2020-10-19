@@ -240,7 +240,7 @@ def soccer_player( gol ):
 				msgKick.data = log
 				pubKick.publish(msgKick)
 		rate.sleep()
-	return soccer_player_serviceResponse('Gool')
+	return soccer_player_serviceResponse('Iniciando control...')
 
 	
 
